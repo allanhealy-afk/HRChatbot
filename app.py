@@ -240,8 +240,56 @@ def chatbot_response(user_input, db_path=str(DB_PATH)):
 # Streamlit UI
 import streamlit as st
 
+from typing import Optional
+import threading
+
+# Optional FastAPI imports for API endpoint
+try:
+    from fastapi import FastAPI, HTTPException
+    from pydantic import BaseModel
+    import uvicorn
+    _FASTAPI_AVAILABLE = True
+except Exception:
+    _FASTAPI_AVAILABLE = False
+
 st.set_page_config(page_title="SQL Chatbot with Streamlit")
 st.title("Acme HR Assistant")
+
+# -----------------------------
+# Minimal JSON API for programmatic access
+# -----------------------------
+class _AskRequest(BaseModel):
+    question: str
+
+# Create the FastAPI app only if dependencies are available
+_api_app: Optional["FastAPI"] = FastAPI(title="Acme HR Assistant API") if _FASTAPI_AVAILABLE else None
+
+if _FASTAPI_AVAILABLE:
+
+    @_api_app.post("/api/ask")
+    def ask_endpoint(payload: _AskRequest):
+        """POST {"question": "..."} -> {"answer": "..."}
+        Runs the same pipeline used by the Streamlit UI.
+        """
+        try:
+            # Ensure DB exists before answering
+            ensure_db()
+            answer = chatbot_response(payload.question)
+            return {"answer": answer}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    def _run_api_server():
+        host = os.getenv("API_HOST", "0.0.0.0")
+        port = int(os.getenv("API_PORT", "8000"))
+        uvicorn.run(_api_app, host=host, port=port, log_level="info")
+
+    # Start API server in a background thread unless disabled
+    if os.getenv("DISABLE_API", "0") != "1":
+        threading.Thread(target=_run_api_server, daemon=True).start()
+else:
+    # Provide a helpful hint in the Streamlit logs if FastAPI isn't installed
+    print("[Acme HR Assistant] FastAPI not installed. API endpoint disabled. Install: pip install fastapi uvicorn pydantic")
 
 @st.cache_resource
 def init_db_once():
@@ -259,3 +307,15 @@ if user_input:
             st.markdown(response)
         except Exception as e:
             st.error(f"An error occurred: {e}")
+
+# ---
+# API usage examples (when FastAPI is installed and running):
+#   curl -s -X POST "http://localhost:8000/api/ask" \
+#        -H "Content-Type: application/json" \
+#        -d '{"question":"Get me the list of tables you have access to"}'
+#
+# Environment variables:
+#   API_HOST=0.0.0.0   # default
+#   API_PORT=8000      # default
+#   DISABLE_API=1      # set to disable background API server
+# ---
