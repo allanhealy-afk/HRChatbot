@@ -25,7 +25,7 @@ check_api_key(cai_api_key, 'CALYPSO_API_KEY')
 DB_PATH = Path(__file__).resolve().with_name("database.db")
 
 def ensure_db(db_path: Path = DB_PATH) -> Path:
-    """Create the SQLite database by running createddb.py if it's missing.
+    """Create the SQLite database by running createdb.py if it's missing.
     Runs the script from its own directory so relative paths inside it work.
     """
     if db_path.exists():
@@ -35,8 +35,8 @@ def ensure_db(db_path: Path = DB_PATH) -> Path:
 
     script_dir = Path(__file__).resolve().parent
     candidates = [
-        script_dir / "createddb.py",
-        script_dir / "scripts" / "createddb.py",
+        script_dir / "createdb.py",
+        script_dir / "scripts" / "createdb.py",
     ]
 
     last_err = None
@@ -46,7 +46,7 @@ def ensure_db(db_path: Path = DB_PATH) -> Path:
         prev_cwd = os.getcwd()
         try:
             os.chdir(script.parent)
-            # Execute as if running "python createddb.py"
+            # Execute as if running "python createdb.py"
             runpy.run_path(str(script), run_name="__main__")
         except Exception as e:
             last_err = e
@@ -56,14 +56,14 @@ def ensure_db(db_path: Path = DB_PATH) -> Path:
     else:
         # Fallback: try as an importable module name if file not found in candidates
         try:
-            runpy.run_module("createddb", run_name="__main__")
+            runpy.run_module("createdb", run_name="__main__")
         except Exception as e:
             last_err = e
 
     if not db_path.exists():
         raise RuntimeError(
-            f"createddb.py ran but did not produce {db_path.name}. "
-            "Update DB_PATH to the filename/location your script writes, or modify createddb.py to write "
+            f"createdb.py ran but did not produce {db_path.name}. "
+            "Update DB_PATH to the filename/location your script writes, or modify createdb.py to write "
             f"'{db_path.name}' next to app.py."
         ) from last_err
 
