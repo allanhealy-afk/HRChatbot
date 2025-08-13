@@ -4,6 +4,8 @@ import requests as r
 import sqlite3
 from dotenv import load_dotenv
 import json
+import runpy
+from pathlib import Path
 
 # Load environment variables once
 load_dotenv()
@@ -19,6 +21,20 @@ def check_api_key(api_key, key_name):
 
 cai_api_key = os.getenv('CALYPSO_API_KEY')
 check_api_key(cai_api_key, 'CALYPSO_API_KEY')
+
+DB_PATH = Path("database.db")
+
+def ensure_db(db_path: Path = DB_PATH):
+    """Create the SQLite database by running createddb.py if it's missing.
+    This runs createddb.py's __main__ so you don't need to import its internals.
+    """
+    if db_path.exists():
+        return
+    try:
+        # Execute createddb.py as a module; it should create database.db in CWD
+        runpy.run_module("createddb", run_name="__main__")
+    except Exception as e:
+        raise RuntimeError(f"Failed to create database at {db_path}: {e}")
 
 def get_schema_info(db_path):
     """Retrieve schema information from the database for RAG."""
@@ -193,6 +209,14 @@ import streamlit as st
 
 st.set_page_config(page_title="SQL Chatbot with Streamlit")
 st.title("Acme HR Assistant")
+
+@st.cache_resource
+def init_db_once():
+    ensure_db(DB_PATH)
+    return str(DB_PATH)
+
+# Ensure the SQLite file exists before any queries run
+init_db_once()
 
 user_input = st.text_input("Enter your natural language query:", placeholder="e.g. Get me the list of tables you have access to")
 
