@@ -22,19 +22,52 @@ def check_api_key(api_key, key_name):
 cai_api_key = os.getenv('CALYPSO_API_KEY')
 check_api_key(cai_api_key, 'CALYPSO_API_KEY')
 
-DB_PATH = Path("database.db")
+DB_PATH = Path(__file__).resolve().with_name("database.db")
 
-def ensure_db(db_path: Path = DB_PATH):
+def ensure_db(db_path: Path = DB_PATH) -> Path:
     """Create the SQLite database by running createddb.py if it's missing.
-    This runs createddb.py's __main__ so you don't need to import its internals.
+    Runs the script from its own directory so relative paths inside it work.
     """
     if db_path.exists():
-        return
-    try:
-        # Execute createddb.py as a module; it should create database.db in CWD
-        runpy.run_module("createddb", run_name="__main__")
-    except Exception as e:
-        raise RuntimeError(f"Failed to create database at {db_path}: {e}")
+        return db_path
+
+    import os
+
+    script_dir = Path(__file__).resolve().parent
+    candidates = [
+        script_dir / "createddb.py",
+        script_dir / "scripts" / "createddb.py",
+    ]
+
+    last_err = None
+    for script in candidates:
+        if not script.exists():
+            continue
+        prev_cwd = os.getcwd()
+        try:
+            os.chdir(script.parent)
+            # Execute as if running "python createddb.py"
+            runpy.run_path(str(script), run_name="__main__")
+        except Exception as e:
+            last_err = e
+        finally:
+            os.chdir(prev_cwd)
+        break
+    else:
+        # Fallback: try as an importable module name if file not found in candidates
+        try:
+            runpy.run_module("createddb", run_name="__main__")
+        except Exception as e:
+            last_err = e
+
+    if not db_path.exists():
+        raise RuntimeError(
+            f"createddb.py ran but did not produce {db_path.name}. "
+            "Update DB_PATH to the filename/location your script writes, or modify createddb.py to write "
+            f"'{db_path.name}' next to app.py."
+        ) from last_err
+
+    return db_path
 
 def get_schema_info(db_path):
     """Retrieve schema information from the database for RAG."""
@@ -178,7 +211,7 @@ Avoid combining names/salaries in a sentence. Format cleanly, one item per line.
     return summary_prompt
 
 
-def chatbot_response(user_input, db_path="database.db"):
+def chatbot_response(user_input, db_path=str(DB_PATH)):
     # Scan the input from the user
 
     # Step 1: Extract schema
@@ -212,8 +245,7 @@ st.title("Acme HR Assistant")
 
 @st.cache_resource
 def init_db_once():
-    ensure_db(DB_PATH)
-    return str(DB_PATH)
+    return str(ensure_db())
 
 # Ensure the SQLite file exists before any queries run
 init_db_once()
